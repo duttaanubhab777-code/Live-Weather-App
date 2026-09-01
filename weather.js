@@ -29,7 +29,7 @@ let sunsetElement = document.getElementById("sunset");
 searchBox.addEventListener("submit", (click) =>{
     click.preventDefault();
     
-    let cityName = searchBar.value;
+    let cityName = searchBar.value.trim();
     
     let apiKey = ("d3a0f4c0f205e62c85931eac5385b6ba");
     let apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${cityName}&appid=${apiKey}&units=metric`;
