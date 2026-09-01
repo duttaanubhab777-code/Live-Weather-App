@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Weather App</title>
+  <link rel="stylesheet" href="Weather css.css">
+      
+</head>
+<body>
+<div class="weather-card">
+        
+        
+      <form id ="search-box">
+            <div class="search-box">
+                <input id="search-bar" type="text" name="cityname" placeholder="Enter City...">
+                <button id="search-button" type="submit">Search</button>
+            </div>
+        </form>
+        <p class ="weather-icon" >🌤️</p>
+        <h1 id="temp">35⁰C</h1>
+        <h2 id="city">City Name</h2>
+        
+        <p id="weather-type"style="font-size: 18px; margin-top: 5px;">Partly Cloudy</p>
+        <div class="details">
+            <div>
+                <p >💦 Humidity</p>
+                <strong id="humidity">75%</strong>
+            </div>
+            <div>
+                <p >💨 Wind</p>
+                <strong id="wind">12 km/h</strong>
+            </div>
+            <div>
+                <p >🌞Sunrise</p>
+                <strong id="sunrise">6AM</strong>
+            </div>
+            <div>
+                <p >🌅Sunset</p>
+                <strong id="sunset">6PM</strong>
+            </div>
+            <div>
+                <p >🌫️Pressure</p>
+                <strong id="pressure">1000 hPa</strong>
+            </div>
+            <div>
+                <p >👁️Visibility</p>
+                <strong id="visibility">8 KM</strong>
+            </div>
+        </div>
+
+    </div>
+    
+        
+           
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    
+
+     <script src="weather.js"></script>      
+  
+
+</body>
+</html>
+
