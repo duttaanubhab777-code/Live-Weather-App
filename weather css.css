@@ -1,0 +1,126 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box; 
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: Arial, sans-serif; 
+    
+    background: linear-gradient(-45deg, #4facfe, #00f2fe, #5f2c82, #49a09d);
+    background-size: 400% 400%;
+    animation: gradientAnimation 10s ease infinite; 
+}
+
+@keyframes gradientAnimation {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.weather-icon {
+    font-size: 80px; 
+    margin: 0;
+    animation: float 2s ease-in-out infinite; 
+}
+
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-15px); } 
+    100% { transform: translateY(0px); }
+}
+
+.weather-card { 
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px); 
+    padding: 30px;
+    border-radius: 25px;
+    width: 350px;
+    text-align: center;
+    color: white; 
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255, 0.2);
+    transition: transform 0.5s ease, box-shadow 0.5s ease;
+}
+
+.weather-card:hover {
+    transform: perspective(1000px) translateY(-10px);
+    box-shadow: 0 25px 45px rgba(0, 0, 0, 0.3);
+}
+
+.search-box {
+    display: flex;
+    justify-content: space-between; 
+    margin-bottom: 25px;
+}
+
+.search-box input {
+    width: 70%;
+    padding: 15px;
+    border-radius: 10px;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    background: rgba(255,255,255,0.8);
+}
+
+.search-box button {
+    width: 25%;
+    background-color: #ffaa00;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-weight: bold; 
+    cursor: pointer; 
+    transition: 0.3s ease;
+}
+
+.search-box button:hover {
+    background-color: #cc8800;
+    transform: translateY(-2px);
+}
+         
+h1 {
+    font-size: 60px; 
+    margin: 10px 0;
+}
+
+h2 {
+    font-size: 30px;
+    margin-bottom: 20px; 
+}
+
+.details {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between; 
+    gap: 15px; 
+}
+
+.details div {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 15px 10px;
+    border-radius: 12px;
+    width: 45%; 
+    font-size: 14px;
+    transition: 0.3s ease;
+}
+
+.details div:hover {
+    background: rgba(0, 0, 0, 0.35);
+    transform: translateY(-3px);
+}
+
+.details div p {
+    color: #dddddd; 
+    margin-bottom: 5px;
+}
+
+.details div strong {
+    font-size: 18px; 
+}
