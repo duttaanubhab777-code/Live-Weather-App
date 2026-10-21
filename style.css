@@ -1,0 +1,143 @@
+*{margin:0;padding:0;box-sizing:border-box}
+[hidden]{display:none!important}
+body{min-height:100vh;font-family:Outfit,system-ui,sans-serif;color:#fff;background:#0b1026;text-shadow:0 1px 10px rgba(0,0,0,.22);overflow-x:hidden}
+#skies,.sky,#fx{position:fixed;inset:0}
+#skies{z-index:0}
+#fx{z-index:1;pointer-events:none;width:100%;height:100%}
+
+/* ---------- animated gradient skies (crossfade on change) ---------- */
+.sky{opacity:0;transition:opacity 1.3s;background-image:linear-gradient(-45deg,var(--a),var(--b),var(--c),var(--d));background-size:300% 300%;animation:shift 16s ease infinite}
+.sky.on{opacity:1}
+@keyframes shift{0%,100%{background-position:0 50%}50%{background-position:100% 50%}}
+.sky-clear-day{--a:#1a8cff;--b:#3fc1ff;--c:#7fdcff;--d:#ffc98a}
+.sky-clear-night{--a:#0b1026;--b:#1b2559;--c:#3a2c7a;--d:#0f3460}
+.sky-clouds-day{--a:#5b86a8;--b:#8fa9bf;--c:#a9bccb;--d:#6f8fb0}
+.sky-clouds-night{--a:#1c2430;--b:#2c3e50;--c:#3b4a5c;--d:#222f3e}
+.sky-rain-day{--a:#36505f;--b:#4b6b80;--c:#2c3e50;--d:#5f7f94}
+.sky-rain-night{--a:#0f1720;--b:#1d2b3a;--c:#263a4d;--d:#142230}
+.sky-thunder{--a:#1a1a2e;--b:#2d2145;--c:#3b2a5c;--d:#16213e}
+.sky-snow-day{--a:#5c88b5;--b:#8db4d9;--c:#6f95c4;--d:#4f7aa8}
+.sky-snow-night{--a:#2b3a55;--b:#4a5f80;--c:#6b7fa0;--d:#35476a}
+.sky-mist{--a:#7b8a94;--b:#a3aeb5;--c:#8e9ca6;--d:#68767f}
+
+/* ---------- layout ---------- */
+.app{position:relative;z-index:2;max-width:480px;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) 14px 30px}
+main{display:flex;flex-direction:column;gap:14px}
+.col{display:contents}
+.card{order:var(--o)}
+@media(min-width:900px){
+  .app{max-width:1100px}
+  main{display:grid;grid-template-columns:1fr 1.35fr;align-items:start}
+  .col{display:flex;flex-direction:column;gap:14px}
+  .card{order:0!important}
+}
+.card{background:rgba(255,255,255,.12);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);border:1px solid rgba(255,255,255,.22);border-radius:24px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.2);animation:rise .7s both;animation-delay:calc(var(--o)*70ms);min-width:0}
+@keyframes rise{from{opacity:0;transform:translateY(24px)}}
+h3{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;opacity:.75;margin-bottom:12px}
+
+/* ---------- search ---------- */
+#search-box{display:flex;gap:8px;margin-bottom:10px}
+#search-box input{flex:1;min-width:0;padding:14px;border:0;border-radius:14px;outline:0;font:inherit;font-size:16px;background:rgba(255,255,255,.88);color:#111;text-shadow:none}
+#search-box button{border:0;border-radius:14px;padding:0 14px;font:inherit;font-weight:600;color:#fff;cursor:pointer;background:rgba(255,255,255,.2);backdrop-filter:blur(10px);transition:.25s}
+#search-button{background:#ffaa00!important}
+#search-box button:hover{transform:translateY(-2px);filter:brightness(1.15)}
+#recent{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+#recent button{border:0;border-radius:99px;padding:6px 6px 6px 12px;font:inherit;font-size:13px;color:#fff;background:rgba(255,255,255,.16);cursor:pointer}
+#recent span{opacity:.6;margin-left:6px;padding:0 6px}
+
+/* ---------- hero ---------- */
+.hero{text-align:center;position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.16) 50%,transparent 65%);background-size:250% 100%;animation:sheen 7s ease-in-out infinite;pointer-events:none}
+@keyframes sheen{from{background-position:150% 0}to{background-position:-50% 0}}
+.hero h1{font-size:30px;font-weight:600}
+.hero h1 small{font-size:14px;opacity:.7;margin-left:8px;font-weight:400}
+.meta{opacity:.75;font-size:14px}
+.temp{font-size:clamp(70px,22vw,104px);font-weight:200;line-height:1;background:linear-gradient(180deg,#fff,rgba(255,255,255,.55));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none}
+.temp sup{font-size:.3em;font-weight:400;vertical-align:top;position:relative;top:.35em}
+.cond{font-size:20px;text-transform:capitalize;margin:4px 0 12px}
+.pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.pills span{background:rgba(0,0,0,.2);padding:6px 12px;border-radius:99px;font-size:14px}
+
+/* ---------- animated weather emoji ---------- */
+.wx{--sz:150px;position:relative;width:var(--sz);height:var(--sz);margin:6px auto;display:grid;place-items:center;animation:pop .9s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{from{opacity:0;transform:scale(.3) rotate(-25deg)}}
+.em{font-size:92px;position:relative;z-index:2;filter:drop-shadow(0 10px 18px rgba(0,0,0,.3));animation:fl 3.5s ease-in-out infinite}
+@keyframes fl{50%{transform:translateY(-10px)}}
+.glow{position:absolute;inset:-10%;border-radius:50%;z-index:1}
+.wx-sun .glow{background:conic-gradient(transparent,rgba(255,220,100,.6),transparent,rgba(255,200,80,.5),transparent,rgba(255,220,100,.6),transparent);filter:blur(10px);animation:spin 9s linear infinite}
+.wx-moon .glow{background:radial-gradient(circle,rgba(200,215,255,.5),transparent 65%);animation:pulse 4s ease-in-out infinite}
+.wx-thunder .glow{background:radial-gradient(circle,rgba(255,235,120,.6),transparent 65%);animation:flash 3s infinite}
+.wx-cloud .em{animation:drift 6s ease-in-out infinite}
+.wx-snow .em,.wx-wind .em{animation:sway 4s ease-in-out infinite}
+.wx-mist .em{animation:fade 4s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{50%{transform:scale(1.12);opacity:.7}}
+@keyframes drift{50%{transform:translateX(14px)}}
+@keyframes sway{50%{transform:translateX(8px) rotate(6deg)}}
+@keyframes fade{50%{opacity:.55;transform:translateX(10px)}}
+@keyframes flash{0%,86%,100%{opacity:.15}88%,92%{opacity:1}90%{opacity:.2}}
+.badge{position:absolute;right:4px;top:4px;font-size:44px;z-index:3;animation:drift 5s ease-in-out infinite}
+.bolt{position:absolute;right:10px;bottom:4px;font-size:38px;z-index:3;animation:flash 3s infinite}
+.drop{position:absolute;top:62%;left:var(--x);width:3px;height:16px;border-radius:3px;background:linear-gradient(#bfe3ff,transparent);z-index:3;opacity:0;animation:rain 1s linear infinite;animation-delay:var(--d)}
+@keyframes rain{0%{opacity:0;transform:translateY(-6px)}20%{opacity:.9}100%{opacity:0;transform:translateY(60px)}}
+.flake{position:absolute;top:60%;left:var(--x);z-index:3;font-size:14px;opacity:0;animation:snowf 3s linear infinite;animation-delay:var(--d)}
+@keyframes snowf{0%{opacity:0}20%{opacity:1}100%{opacity:0;transform:translateY(70px) rotate(180deg)}}
+.star{position:absolute;left:var(--x);top:var(--y);font-size:12px;animation:tw 2s ease-in-out infinite;animation-delay:var(--d)}
+@keyframes tw{50%{opacity:.2;transform:scale(.5)}}
+.mi{font-size:26px;display:inline-block;transition:.3s}
+.hr:hover .mi,.day:hover .mi{transform:scale(1.25) rotate(-8deg)}
+
+/* ---------- tips ---------- */
+#tips p{padding:8px 0;font-size:15px;border-bottom:1px solid rgba(255,255,255,.12)}
+#tips p:last-child{border:0}
+
+/* ---------- hourly ---------- */
+.strip{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:6px;scrollbar-width:thin}
+.hr{flex:0 0 64px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border-radius:16px;background:rgba(0,0,0,.16);font-size:13px}
+.hr.now{background:rgba(255,170,0,.3);outline:1px solid rgba(255,200,80,.6)}
+.hr strong{font-size:17px}.hr em{font-style:normal;font-size:11px;opacity:.85;min-height:14px}
+
+/* ---------- graphs ---------- */
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:4px;scrollbar-width:none}
+.tabs button{flex:none;border:0;border-radius:99px;padding:8px 14px;font:inherit;font-size:13px;color:#fff;background:rgba(255,255,255,.14);cursor:pointer;transition:.25s}
+.tabs button.on{background:#ffaa00;transform:scale(1.04)}
+.cs{overflow-x:auto}
+.cb{height:270px;position:relative}
+.cb.wide{min-width:680px}
+
+/* ---------- 5 day ---------- */
+.day{display:grid;grid-template-columns:52px 34px 38px 42px 1fr 42px;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1);font-size:15px}
+.day:last-child{border:0}
+.day em{font-style:normal;font-size:12px;opacity:.8}
+.day i{font-style:normal;opacity:.7;text-align:right}
+.rg{height:6px;border-radius:9px;background:rgba(0,0,0,.25);position:relative}
+.rg u{position:absolute;top:0;bottom:0;border-radius:9px;background:linear-gradient(90deg,#4facfe,#ffd166,#ff6b6b)}
+
+/* ---------- details ---------- */
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st{background:rgba(0,0,0,.18);border-radius:16px;padding:12px;transition:.3s}
+.st:hover{background:rgba(0,0,0,.32);transform:translateY(-3px)}
+.st p{font-size:13px;opacity:.75;margin-bottom:4px}
+.st strong{font-size:20px;font-weight:600;display:block}
+.st small{font-size:12px;opacity:.8}
+.cp{display:inline-block;transform:rotate(var(--r));transition:transform 1s}
+.bar{height:5px;border-radius:9px;background:rgba(255,255,255,.18);margin-top:8px;overflow:hidden}
+.bar u{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,#4facfe,#00f2fe);animation:grow 1.2s ease-out}
+@keyframes grow{from{width:0!important}}
+
+/* ---------- air quality ---------- */
+.aq{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.aq .num{font-size:56px;font-weight:200;line-height:1}
+.aq p{font-size:13px;opacity:.8}
+.scale{display:flex;gap:4px;margin-bottom:14px}
+.scale u{flex:1;height:8px;border-radius:9px}
+.pl{display:grid;grid-template-columns:48px 1fr 48px;gap:10px;align-items:center;font-size:13px;margin-top:8px}
+.pl .bar{margin:0}.pl em{font-style:normal;text-align:right}
+
+/* ---------- loading / misc ---------- */
+.sk{height:260px;border-radius:24px;background:linear-gradient(90deg,rgba(255,255,255,.1),rgba(255,255,255,.24),rgba(255,255,255,.1));background-size:200%;animation:sh 1.3s linear infinite}
+.sk.s2{height:120px;margin-top:14px}
+@keyframes sh{to{background-position:-200% 0}}
+body.busy #search-button{opacity:.6;pointer-events:none}
+.credit{text-align:center;font-size:13px;color:#ff4d57;font-weight:600;margin-top:22px}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important}}

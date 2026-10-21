@@ -1,67 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Weather App</title>
-  <link rel="stylesheet" href="weather css.css">
-      
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a8cff" id="tc">
+<title>Live Weather App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="weather-card">
-        
-        
-      <form id ="search-box">
-            <div class="search-box">
-                <input id="search-bar" type="text" name="cityname" placeholder="Enter City...">
-                <button id="search-button" type="submit">Search</button>
-            </div>
-        </form>
-        <p class ="weather-icon" >🌤️</p>
-        <h1 id="temp">35⁰C</h1>
-        <h2 id="city">City Name</h2>
-        
-        <p id="weather-type"style="font-size: 18px; margin-top: 5px;">Partly Cloudy</p>
-        <div class="details">
-            <div>
-                <p >💦 Humidity</p>
-                <strong id="humidity">75%</strong>
-            </div>
-            <div>
-                <p >💨 Wind</p>
-                <strong id="wind">12 km/h</strong>
-            </div>
-            <div>
-                <p >🌞Sunrise</p>
-                <strong id="sunrise">6AM</strong>
-            </div>
-            <div>
-                <p >🌅Sunset</p>
-                <strong id="sunset">6PM</strong>
-            </div>
-            <div>
-                <p >🌫️Pressure</p>
-                <strong id="pressure">1000 hPa</strong>
-            </div>
-            <div>
-                <p >👁️Visibility</p>
-                <strong id="visibility">8 KM</strong>
-            </div>
-        </div>
-    <p style="text-align: center; font-size: 13px; color: #ff000a; font-weight: bold; margin-top:20px;">Created by Anubhab Dutta.</p>
-    
+<div id="skies"></div>
+<canvas id="fx"></canvas>
 
+<div class="app">
+  <form id="search-box">
+    <input id="search-bar" type="text" placeholder="Search city…" list="sugg" autocomplete="off">
+    <datalist id="sugg"></datalist>
+    <button id="search-button" type="submit">Search</button>
+    <button id="locate" type="button" title="My location">📍</button>
+    <button id="unit" type="button" title="Change unit">°C</button>
+  </form>
+  <div id="recent"></div>
+
+  <div id="skeleton"><div class="sk"></div><div class="sk s2"></div><div class="sk s2"></div></div>
+
+  <main id="main" hidden>
+    <div class="col">
+      <section class="card hero" id="hero" style="--o:1"></section>
+      <section class="card" id="tips" style="--o:2"></section>
+      <section class="card" id="stats" style="--o:6"></section>
+      <section class="card" id="aqi" style="--o:7"></section>
     </div>
-    
-        
-           
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
-    
+    <div class="col">
+      <section class="card" id="hourly" style="--o:3"></section>
+      <section class="card" id="charts" style="--o:4"></section>
+      <section class="card" id="daily" style="--o:5"></section>
+    </div>
+  </main>
 
-     <script src="weather.js"></script>      
-  
+  <p class="credit">Created by Anubhab Dutta.</p>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="weather.js"></script>
 </body>
 </html>
-
