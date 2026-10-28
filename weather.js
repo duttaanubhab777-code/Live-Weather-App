@@ -1,33 +1,50 @@
 "use strict";
+/* =====================================================================
+   Live Weather — weather.js
+   Data flow:  browser → /api/owm (Vercel function, holds the secret key)
+                       → OpenWeatherMap
+   There is NO API key in this file. See api/owm.js and README.md.
+   ===================================================================== */
+
 /* ================= CONFIG ================= */
-const API_KEY = "d3a0f4c0f205e62c85931eac5385b6ba"; // 👉 replace with your own OpenWeatherMap key
 const DEFAULT_CITY = "Kolkata",
-    REFRESH_MIN = 10,
-    API = "https://api.openweathermap.org";
+    REFRESH_MIN = 10, // auto refresh when the tab is open
+    API = "/api/owm"; // our own serverless proxy
 
 /* ================= HELPERS ================= */
 const $ = s => document.querySelector(s);
 const esc = s =>
-    String(s).replace(/[&<>"']/g, c => "&#" + c.charCodeAt(0) + ";");
+    String(s ?? "").replace(/[&<>"']/g, c => "&#" + c.charCodeAt(0) + ";");
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const reduceMotion = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const ls = {
-    get: (k, d) => {
+    get(k, d) {
         try {
             return JSON.parse(localStorage.getItem(k)) ?? d;
         } catch {
             return d;
         }
     },
-    set: (k, v) => {
+    set(k, v) {
         try {
             localStorage.setItem(k, JSON.stringify(v));
         } catch {}
     }
 };
+
+/* ================= STATE + UNITS ================= */
 const S = {
-    unit: ls.get("wx_unit", "metric"),
+    unit: ls.get("wx_unit", "metric") === "imperial" ? "imperial" : "metric",
     tab: "temp",
     chart: null,
-    prevT: null
+    prevT: null,
+    req: 0, // request counter — ignores out-of-order responses
+    cur: null,
+    fc: null,
+    air: null,
+    airFc: null,
+    geo: null,
+    at: 0
 };
 const UN = {
     metric: {
@@ -41,7 +58,7 @@ const UN = {
     imperial: {
         t: c => (c * 9) / 5 + 32,
         tu: "°F",
-        w: m => m * 2.237,
+        w: m => m * 2.23694,
         wu: "mph",
         v: m => m / 1609.34,
         vu: "mi"
@@ -49,101 +66,120 @@ const UN = {
 };
 const U = () => UN[S.unit],
     T = c => Math.round(U().t(c)) + "°";
+
 const D = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const loc = u => new Date((u + S.cur.timezone) * 1e3); // city-local time (read with getUTC*)
-const hr = (u, m = 1) => {
+// city-local time: shift the UTC timestamp, then read with getUTC*()
+const loc = u => new Date((u + (S.cur?.timezone ?? 0)) * 1e3);
+const hr = (u, withMin = 1) => {
     const d = loc(u);
     let h = d.getUTCHours();
     const ap = h < 12 ? "AM" : "PM";
     h = h % 12 || 12;
-    return m
+    return withMin
         ? `${h}:${String(d.getUTCMinutes()).padStart(2, "0")} ${ap}`
         : `${h} ${ap}`;
 };
-const dk = u => {
+const dayKey = u => {
     const d = loc(u);
     return d.getUTCFullYear() * 1e4 + d.getUTCMonth() * 100 + d.getUTCDate();
 };
-const night = () => S.cur.dt < S.cur.sys.sunrise || S.cur.dt > S.cur.sys.sunset;
+// OpenWeather icon codes end with "d" (day) or "n" (night) — works even in polar regions
+const isNight = () => {
+    const w = S.cur.weather[0];
+    if (w.icon) return w.icon.endsWith("n");
+    const s = S.cur.sys;
+    return S.cur.dt < s.sunrise || S.cur.dt > s.sunset;
+};
 const compass = d =>
     [
-        "N",
-        "NNE",
-        "NE",
-        "ENE",
-        "E",
-        "ESE",
-        "SE",
-        "SSE",
-        "S",
-        "SSW",
-        "SW",
-        "WSW",
-        "W",
-        "WNW",
-        "NW",
-        "NNW"
+        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+        "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
     ][Math.round(d / 22.5) % 16];
 const dew = (t, h) => {
-    const g = Math.log(h / 100) + (17.62 * t) / (243.12 + t);
+    const g = Math.log(Math.max(h, 1) / 100) + (17.62 * t) / (243.12 + t);
     return (243.12 * g) / (17.62 - g);
 };
+// how "bad" a condition is — used to pick the icon for a whole day
 const sev = id =>
-    id < 300
-        ? 5
-        : id < 400
-          ? 3
-          : id < 600
-            ? 4
-            : id < 700
-              ? 4
-              : id < 800
-                ? 2
-                : id > 802
-                  ? 1
-                  : 0;
+    id < 300 ? 5 : id < 400 ? 3 : id < 700 ? 4 : id < 800 ? 2 : id > 802 ? 1 : 0;
+const hexRgb = h => {
+    const m = String(h).trim().replace("#", "");
+    const n = parseInt(m.length === 3 ? m.replace(/./g, "$&$&") : m, 16);
+    return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+};
 
-/* ================= API ================= */
+/* ================= TOAST + ERRORS ================= */
+let toastTimer;
+function toast(msg, ms = 4200) {
+    const t = $("#toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), ms);
+}
+const MSG = {
+    notfound: "City not found. Check the spelling and try again.",
+    nokey: "The server has no API key yet. Add OPENWEATHER_API_KEY in Vercel → Settings → Environment Variables, then redeploy.",
+    key: "OpenWeather rejected the API key. Check that it is correct and activated (new keys can take up to 2 hours).",
+    limit: "Too many requests. Wait a minute and try again.",
+    network: "No internet connection.",
+    noapi: "The /api/owm route wasn’t found. Deploy on Vercel, or run “vercel dev” locally.",
+    server: "The weather service is having trouble. Try again in a moment."
+};
 class Err extends Error {}
-async function api(p, q) {
+
+function showEmpty(e) {
+    const code = MSG[e?.message] ? e.message : "server";
+    $("#skeleton").hidden = true;
+    $("#main").hidden = true;
+    $("#empty-ico").innerHTML = Ico.ui(code === "network" ? "wifi" : "alert");
+    $("#empty-title").textContent =
+        code === "notfound" ? "City not found" : "Couldn’t load the weather";
+    $("#empty-text").textContent = MSG[code];
+    $("#empty").hidden = false;
+}
+// first load → full empty state; later (we already have data) → small toast
+const fail = e => (S.cur ? toast(MSG[e?.message] || MSG.server) : showEmpty(e));
+
+/* ================= API (through our proxy) ================= */
+async function api(path, params = {}) {
     let r;
     try {
-        r = await fetch(
-            API + p + "?" + new URLSearchParams({ ...q, appid: API_KEY })
-        );
+        r = await fetch(API + "?" + new URLSearchParams({ path, ...params }));
     } catch {
         throw new Err("network");
     }
-    if (!r.ok)
+    const isJson = (r.headers.get("content-type") || "").includes("json");
+    if (!r.ok) {
+        let code = "";
+        if (isJson) {
+            try {
+                code = (await r.json()).error || "";
+            } catch {}
+        }
         throw new Err(
-            r.status === 401
-                ? "key"
-                : r.status === 429
-                  ? "limit"
-                  : r.status === 404
-                    ? "notfound"
-                    : "server"
+            code === "missing_key"
+                ? "nokey"
+                : code === "upstream_key_rejected"
+                  ? "key"
+                  : r.status === 429
+                    ? "limit"
+                    : r.status === 404 && !code
+                      ? "noapi"
+                      : r.status === 404
+                        ? "notfound"
+                        : "server"
         );
+    }
+    if (!isJson) throw new Err("noapi"); // e.g. a static server answered with index.html
     return r.json();
 }
-const MSG = {
-    notfound: "City not found !! Please check the spelling.",
-    key: "Invalid API key — set API_KEY in weather.js",
-    limit: "Too many requests — wait a minute and retry.",
-    network: "No internet connection.",
-    server: "Weather server error — try again later."
-};
-const fail = e =>
-    Swal.fire({
-        icon: "error",
-        title: "Oops...",
-        text: MSG[e.message] || "Something went wrong.",
-        confirmButtonColor: "#ffaa00",
-        background: "rgba(255,255,255,.95)"
-    });
 
-async function load(g, silent) {
+async function load(g, silent = false) {
+    const my = ++S.req;
     document.body.classList.add("busy");
+    $("#empty").hidden = true;
+    if (!S.cur) $("#skeleton").hidden = false;
     try {
         const p = { lat: g.lat, lon: g.lon },
             m = { ...p, units: "metric" };
@@ -153,64 +189,25 @@ async function load(g, silent) {
             api("/data/2.5/air_pollution", p).catch(() => null),
             api("/data/2.5/air_pollution/forecast", p).catch(() => null)
         ]);
+        if (my !== S.req) return; // a newer search already started
+        if (!cur?.weather?.[0] || !fc?.list?.length) throw new Err("server");
         Object.assign(S, { geo: g, cur, fc, air, airFc, at: Date.now() });
         ls.set("wx_last", g);
         pushRecent(g);
         render();
     } catch (e) {
+        if (my !== S.req) return;
         console.error(e);
         silent || fail(e);
     } finally {
-        document.body.classList.remove("busy");
-        $("#skeleton").hidden = true;
+        if (my === S.req) {
+            document.body.classList.remove("busy");
+            $("#skeleton").hidden = true;
+        }
     }
 }
 
-/* ================= ANIMATED EMOJI (changes with weather + day/night) ================= */
-function icon(id, n) {
-    // -> [emoji, animation kind, badge]
-    if (id < 300) return [id >= 210 && id <= 221 ? "🌩️" : "⛈️", "thunder"];
-    if (id < 400) return [n ? "🌧️" : "🌦️", "rain"];
-    if (id < 600)
-        return [id === 500 && !n ? "🌦️" : id === 511 ? "🌨️" : "🌧️", "rain"];
-    if (id < 700) return [id === 600 || id === 620 ? "🌨️" : "❄️", "snow"];
-    if (id === 781) return ["🌪️", "wind"];
-    if (id === 771) return ["💨", "wind"];
-    if (id < 800) return ["🌫️", "mist"];
-    if (id === 800) return n ? ["🌙", "moon"] : ["☀️", "sun"];
-    if (id === 801) return n ? ["🌙", "moon", "☁️"] : ["🌤️", "sun"];
-    if (id === 802) return n ? ["☁️", "cloud", "🌙"] : ["⛅", "sun"];
-    return [n || id === 804 ? "☁️" : "🌥️", "cloud"];
-}
-function heroIcon(id, n) {
-    const [e, k, b] = icon(id, n),
-        r = [...Array(k === "thunder" || k === "rain" ? 7 : 6).keys()];
-    let x = "";
-    if (k === "rain" || k === "thunder")
-        x = r
-            .map(
-                i =>
-                    `<i class="drop" style="--x:${12 + i * 12}%;--d:${(i * 0.23) % 1}s"></i>`
-            )
-            .join("");
-    if (k === "snow")
-        x = r
-            .map(
-                i =>
-                    `<i class="flake" style="--x:${10 + i * 15}%;--d:${i * 0.4}s">❄</i>`
-            )
-            .join("");
-    if (n && (k === "moon" || k === "cloud"))
-        x = r
-            .map(
-                i =>
-                    `<i class="star" style="--x:${((i * 37) % 90) + 5}%;--y:${((i * 53) % 80) + 5}%;--d:${i * 0.5}s">✦</i>`
-            )
-            .join("");
-    return `<div class="wx wx-${k}"><span class="glow"></span><span class="em">${e}</span>${b ? `<span class="badge">${b}</span>` : ""}${x}${k === "thunder" ? '<span class="bolt">⚡</span>' : ""}</div>`;
-}
-
-/* ================= SKY GRADIENT + PARTICLES ================= */
+/* ================= SKY GRADIENT ================= */
 const skyOf = (id, n) => {
     const d = n ? "night" : "day";
     return id < 300
@@ -226,19 +223,21 @@ const skyOf = (id, n) => {
                 : "clouds-" + d;
 };
 const TC = {
-    "clear-day": "#1a8cff",
+    "clear-day": "#0f6fe0",
     "clear-night": "#0b1026",
-    "clouds-day": "#5b86a8",
+    "clouds-day": "#46688a",
     "clouds-night": "#1c2430",
-    "rain-day": "#36505f",
+    "rain-day": "#2f4757",
     "rain-night": "#0f1720",
     thunder: "#1a1a2e",
-    "snow-day": "#5c88b5",
+    "snow-day": "#4a76a4",
     "snow-night": "#2b3a55",
-    mist: "#7b8a94"
+    mist: "#5f6f7a"
 };
 let skyNow;
 function setSky(k) {
+    document.body.dataset.sky = k; // drives the accent colour in CSS
+    $("#tc").content = TC[k];
     if (k === skyNow) return;
     skyNow = k;
     const e = document.createElement("div");
@@ -249,8 +248,9 @@ function setSky(k) {
     );
     const old = [...$("#skies").children].filter(c => c !== e);
     setTimeout(() => old.forEach(o => o.remove()), 1500);
-    $("#tc").content = TC[k];
 }
+
+/* ================= SKY PARTICLES (canvas) ================= */
 function fxOf(id, n, w) {
     const f = {
         rain: 0,
@@ -329,13 +329,17 @@ const fx = (() => {
             return k;
         })());
     function size() {
-        const d = Math.min(devicePixelRatio || 1, 2);
-        W = innerWidth;
-        H = innerHeight;
+        const d = Math.min(devicePixelRatio || 1, 2),
+            nw = innerWidth,
+            nh = innerHeight;
+        // phones fire "resize" when the address bar hides/shows — don't rebuild particles for that
+        const real = !W || nw !== W || Math.abs(nh - H) > 160;
+        W = nw;
+        H = nh;
         c.width = W * d;
         c.height = H * d;
         x.setTransform(d, 0, 0, d, 0, 0);
-        if (cfg) build();
+        if (cfg && real) build();
     }
     function build() {
         P = [];
@@ -500,106 +504,106 @@ const fx = (() => {
 })();
 
 /* ================= UI SECTIONS ================= */
-function count(s, a, b) {
-    const e = $(s),
-        t0 = performance.now();
-    a = a ?? 0;
-    (function f(t) {
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const drop = () => Ico.ui("drop");
+
+function count(sel, from, to) {
+    const e = $(sel);
+    if (!e) return;
+    cancelAnimationFrame(e._raf);
+    if (reduceMotion) return void (e.textContent = to);
+    const t0 = performance.now(),
+        a = from ?? 0;
+    (function step(t) {
         const p = Math.min(1, (t - t0) / 900);
-        e.textContent = Math.round(a + (b - a) * (1 - Math.pow(1 - p, 3)));
-        if (p < 1) requestAnimationFrame(f);
+        e.textContent = Math.round(a + (to - a) * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) e._raf = requestAnimationFrame(step);
     })(t0);
 }
 
 function hero() {
     const c = S.cur,
         w = c.weather[0],
+        n = isNight(),
         v = Math.round(U().t(c.main.temp));
-    $("#hero").innerHTML =
-        `<h1>${esc(S.geo.name || c.name)}<small>${esc(c.sys.country || "")}</small></h1>
-  <p class="meta">${S.geo.state ? esc(S.geo.state) + " · " : ""}<span id="clock"></span></p>
-  ${heroIcon(w.id, night())}
+    $("#hero").innerHTML = `<h1>${esc(S.geo.name || c.name)}<small>${esc(c.sys.country || S.geo.country || "")}</small></h1>
+  <p class="meta">${S.geo.state ? `<span>${esc(S.geo.state)}</span>` : ""}<span id="clock"></span></p>
+  <div class="wx">${Ico.wx(Ico.kindOf(w.id, n))}</div>
   <div class="temp"><span id="tn">0</span><sup>${U().tu}</sup></div>
   <p class="cond">${esc(w.description)}</p>
-  <div class="pills"><span>Feels ${T(c.main.feels_like)}</span><span>↑ ${T(c.main.temp_max)}</span><span>↓ ${T(c.main.temp_min)}</span></div>`;
+  <div class="pills"><span>${Ico.ui("therm")}Feels ${T(c.main.feels_like)}</span><span>${Ico.ui("up")}${T(c.main.temp_max)}</span><span>${Ico.ui("down")}${T(c.main.temp_min)}</span></div>`;
     count("#tn", S.prevT, v);
     S.prevT = v;
 }
+
 function tips() {
     const c = S.cur,
         t = c.main.temp,
+        f = c.main.feels_like,
         id = c.weather[0].id,
-        a = [],
-        pop = Math.max(...S.fc.list.slice(0, 4).map(i => i.pop)),
-        q = S.air?.list?.[0].main.aqi;
-    if (id < 300) a.push("⛈️ Thunderstorm nearby — stay indoors");
+        pop = Math.max(0, ...S.fc.list.slice(0, 4).map(i => i.pop || 0)),
+        q = S.air?.list?.[0]?.main.aqi,
+        a = [];
+    if (id < 300) a.push(["bolt", "Thunderstorm nearby — stay indoors."]);
     if (pop >= 0.4)
-        a.push(
-            `☔ Carry an umbrella — ${Math.round(pop * 100)}% rain chance soon`
-        );
-    if (t >= 35) a.push("🥵 Very hot — drink water, avoid midday sun");
-    else if (t >= 30 && c.main.humidity >= 70)
-        a.push("😓 Hot & humid — dress light, stay hydrated");
-    if (t <= 10) a.push("🧥 Cold — wear a jacket");
-    if (c.wind.speed >= 10) a.push("💨 Strong wind — secure loose items");
-    if ((c.visibility ?? 1e4) < 2000)
-        a.push("🌫️ Low visibility — drive carefully");
-    if (q >= 4) a.push("😷 Poor air quality — consider a mask");
-    if (id === 800 && !night())
-        a.push("🕶️ Clear sunny sky — sunglasses & sunscreen");
-    if (!a.length) a.push("✨ Pleasant weather — enjoy your day!");
-    $("#tips").innerHTML = a.map(x => `<p>${x}</p>`).join("");
+        a.push(["umbrella", `Carry an umbrella — ${Math.round(pop * 100)}% chance of rain in the next 12 hours.`]);
+    if (f >= 38) a.push(["therm", "Dangerously hot — drink water and avoid the midday sun."]);
+    else if (f >= 32) a.push(["therm", "Hot and humid — dress light and stay hydrated."]);
+    if (t <= 10) a.push(["snow", "Cold — wear a jacket."]);
+    if (c.wind.speed >= 10) a.push(["wind", "Strong wind — secure loose items outside."]);
+    if ((c.visibility ?? 1e4) < 2000) a.push(["eye", "Low visibility — drive carefully."]);
+    if (q >= 4) a.push(["alert", "Poor air quality — consider a mask outdoors."]);
+    if (id === 800 && !isNight()) a.push(["sun", "Clear and sunny — sunglasses and sunscreen."]);
+    if (!a.length) a.push(["sparkle", "Pleasant weather — enjoy your day."]);
+    $("#tips").innerHTML = a.map(([i, x]) => `<p>${Ico.ui(i)}<span>${x}</span></p>`).join("");
 }
+
 function hourly() {
-    const L = S.fc.list.slice(0, 12),
-        c = S.cur;
+    const c = S.cur,
+        L = S.fc.list.slice(0, 12);
     const H = [
-        {
-            dt: c.dt,
-            t: c.main.temp,
-            id: c.weather[0].id,
-            n: night(),
-            pop: L[0].pop,
-            now: 1
-        },
+        { dt: c.dt, t: c.main.temp, id: c.weather[0].id, n: isNight(), pop: L[0]?.pop || 0, now: 1 },
         ...L.map(i => ({
             dt: i.dt,
             t: i.main.temp,
             id: i.weather[0].id,
-            n: i.sys.pod === "n",
-            pop: i.pop
+            n: i.sys?.pod === "n",
+            pop: i.pop || 0
         }))
     ];
     $("#hourly").innerHTML =
-        `<h3>Hourly</h3><div class="strip">` +
+        `<h3>${Ico.ui("clock")}Next 36 hours</h3><div class="strip">` +
         H.map(
             h =>
-                `<div class="hr${h.now ? " now" : ""}"><b>${h.now ? "Now" : hr(h.dt, 0)}</b><span class="mi">${icon(h.id, h.n)[0]}</span><strong>${T(h.t)}</strong><em>${h.pop > 0.1 ? "💧" + Math.round(h.pop * 100) + "%" : "&nbsp;"}</em></div>`
+                `<div class="hr${h.now ? " now" : ""}"><b>${h.now ? "Now" : hr(h.dt, 0)}</b>${Ico.wx(Ico.kindOf(h.id, h.n), "mini")}<strong>${T(h.t)}</strong><em>${h.pop > 0.1 ? drop() + Math.round(h.pop * 100) + "%" : ""}</em></div>`
         ).join("") +
         "</div>";
 }
+
 function daily() {
-    const m = new Map();
+    const groups = new Map();
     S.fc.list.forEach(i => {
-        const k = dk(i.dt);
-        (m.get(k) || m.set(k, []).get(k)).push(i);
+        const k = dayKey(i.dt);
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(i);
     });
-    return [...m.values()].slice(0, 5).map((it, j) => {
-        const t = it.map(i => i.main.temp);
-        if (j === 0) t.push(S.cur.main.temp);
+    const today = dayKey(S.cur.dt);
+    return [...groups.entries()].slice(0, 5).map(([k, it]) => {
+        const temps = it.map(i => i.main.temp);
+        if (k === today) temps.push(S.cur.main.temp);
         const noon = i => Math.abs(loc(i.dt).getUTCHours() - 12);
+        // rainy/stormy slot wins; otherwise use the slot closest to noon
         const pick =
             it
-                .filter(i => i.pop >= 0.35)
-                .sort(
-                    (a, b) => sev(b.weather[0].id) - sev(a.weather[0].id)
-                )[0] || it.reduce((a, b) => (noon(b) < noon(a) ? b : a));
+                .filter(i => (i.pop || 0) >= 0.35)
+                .sort((a, b) => sev(b.weather[0].id) - sev(a.weather[0].id))[0] ||
+            it.reduce((a, b) => (noon(b) < noon(a) ? b : a));
         return {
-            n: j ? D[loc(it[0].dt).getUTCDay()] : "Today",
-            hi: Math.max(...t),
-            lo: Math.min(...t),
+            n: k === today ? "Today" : D[loc(it[0].dt).getUTCDay()],
+            hi: Math.max(...temps),
+            lo: Math.min(...temps),
             id: pick.weather[0].id,
-            pop: Math.max(...it.map(i => i.pop))
+            pop: Math.max(...it.map(i => i.pop || 0))
         };
     });
 }
@@ -608,74 +612,80 @@ function dailyUI() {
         mn = Math.min(...d.map(x => x.lo)),
         r = Math.max(...d.map(x => x.hi)) - mn || 1;
     $("#daily").innerHTML =
-        "<h3>5-Day Forecast</h3>" +
+        `<h3>${Ico.ui("cal")}5-day forecast</h3>` +
         d
             .map(
                 x =>
-                    `<div class="day"><b>${x.n}</b><span class="mi">${icon(x.id, 0)[0]}</span><em>${x.pop > 0.1 ? "💧" + Math.round(x.pop * 100) + "%" : ""}</em><i>${T(x.lo)}</i><div class="rg"><u style="left:${((x.lo - mn) / r) * 100}%;width:${Math.max(6, ((x.hi - x.lo) / r) * 100)}%"></u></div><strong>${T(x.hi)}</strong></div>`
+                    `<div class="day"><b>${x.n}</b>${Ico.wx(Ico.kindOf(x.id, false), "mini")}<em>${x.pop > 0.1 ? Math.round(x.pop * 100) + "%" : ""}</em><i>${T(x.lo)}</i><div class="rg"><u style="left:${((x.lo - mn) / r) * 100}%;width:${Math.max(6, ((x.hi - x.lo) / r) * 100)}%"></u></div><strong>${T(x.hi)}</strong></div>`
             )
             .join("");
 }
+
+function sunTile() {
+    const { sunrise: sr, sunset: ss } = S.cur.sys,
+        now = S.cur.dt;
+    if (!sr || !ss || ss <= sr) return ""; // polar day/night — no arc
+    const p = clamp((now - sr) / (ss - sr), 0, 1),
+        up = now >= sr && now <= ss,
+        len = Math.PI * 90,
+        th = Math.PI * p,
+        x = 100 - 90 * Math.cos(th),
+        y = 90 - 90 * Math.sin(th),
+        dl = ss - sr;
+    return `<div class="st wide sun"><p>${Ico.ui("sun")}Sun</p>
+  <svg viewBox="0 0 200 100" role="img" aria-label="Sun position today">
+    <path class="track" d="M10 90A90 90 0 0 1 190 90"/>
+    <path class="done" style="--len:${(p * len).toFixed(1)}" d="M10 90A90 90 0 0 1 190 90"/>
+    <line class="horizon" x1="0" y1="90" x2="200" y2="90"/>
+    <circle class="dot${up ? "" : " off"}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6"/>
+  </svg>
+  <div class="sun-row">
+    <div><span>${Ico.ui("sunrise")} Sunrise</span><strong>${hr(sr)}</strong></div>
+    <div class="mid"><strong>${Math.floor(dl / 3600)}h ${Math.floor((dl % 3600) / 60)}m</strong><span>daylight</span></div>
+    <div><span>${Ico.ui("sunset")} Sunset</span><strong>${hr(ss)}</strong></div>
+  </div></div>`;
+}
+
 function stats() {
     const c = S.cur,
         m = c.main,
         u = U(),
         vis = c.visibility ?? 1e4,
-        pd = S.fc.list[2].main.pressure - m.pressure,
-        dr = c.wind.deg ?? 0,
-        dl = c.sys.sunset - c.sys.sunrise;
-    const cell = (i, l, v, s = "", b) =>
-        `<div class="st"><p>${i} ${l}</p><strong>${v}</strong><small>${s}</small>${b != null ? `<div class="bar"><u style="width:${b}%"></u></div>` : ""}</div>`;
+        pd = (S.fc.list[2]?.main.pressure ?? m.pressure) - m.pressure,
+        dr = c.wind.deg ?? 0;
+    const tile = (icon, label, val, sub = "", ring) =>
+        `<div class="st"><p>${Ico.ui(icon)}${label}</p><strong>${val}</strong><small>${sub}</small>${ring != null ? `<div class="ring" style="--p:${clamp(ring, 0, 100)}"></div>` : ""}</div>`;
     $("#stats").innerHTML =
-        "<h3>Details</h3><div class='sg'>" +
-        cell(
-            "🌡️",
-            "Feels like",
-            T(m.feels_like),
-            "Dew point " + T(dew(m.temp, m.humidity))
-        ) +
-        cell("💦", "Humidity", m.humidity + "%", "", m.humidity) +
-        cell(
-            "💨",
+        `<h3>${Ico.ui("therm")}Details</h3><div class="sg">` +
+        tile("therm", "Feels like", T(m.feels_like), "Dew point " + T(dew(m.temp, m.humidity))) +
+        tile("drop", "Humidity", m.humidity + "%", "", m.humidity) +
+        tile(
+            "wind",
             "Wind",
-            `${u.w(c.wind.speed).toFixed(1)} ${u.wu}`,
-            `<span class="cp" style="--r:${dr + 90}deg">➤</span> ${compass(dr)}${c.wind.gust ? " · gust " + u.w(c.wind.gust).toFixed(0) : ""}`
+            `${u.w(c.wind.speed).toFixed(1)} <span style="font-size:14px;font-weight:400">${u.wu}</span>`,
+            `<span class="cp" style="--r:${(dr + 180) % 360}deg">${Ico.ui("nav")}</span>${compass(dr)}${c.wind.gust ? " · gust " + u.w(c.wind.gust).toFixed(0) : ""}`
         ) +
-        cell(
-            "🧭",
+        tile(
+            "gauge",
             "Pressure",
-            m.pressure + " hPa",
-            pd > 2 ? "↗ Rising" : pd < -2 ? "↘ Falling" : "→ Steady"
+            `${m.pressure} <span style="font-size:14px;font-weight:400">hPa</span>`,
+            pd > 2 ? "Rising" : pd < -2 ? "Falling" : "Steady"
         ) +
-        cell(
-            "👁️",
-            "Visibility",
-            `${u.v(vis).toFixed(1)} ${u.vu}`,
-            "",
-            Math.min(100, vis / 100)
-        ) +
-        cell("☁️", "Clouds", c.clouds.all + "%", "", c.clouds.all) +
-        cell("🌅", "Sunrise", hr(c.sys.sunrise)) +
-        cell(
-            "🌇",
-            "Sunset",
-            hr(c.sys.sunset),
-            `${Math.floor(dl / 3600)}h ${Math.floor((dl % 3600) / 60)}m daylight`
-        ) +
+        tile("eye", "Visibility", `${u.v(vis).toFixed(1)} <span style="font-size:14px;font-weight:400">${u.vu}</span>`, "", Math.min(100, vis / 100)) +
+        tile("cloud", "Clouds", c.clouds.all + "%", "", c.clouds.all) +
+        sunTile() +
         "</div>";
 }
+
 const AQ = [
     0,
-    { n: "Good", c: "#4ade80", t: "Air is clean — enjoy outdoors" },
-    { n: "Fair", c: "#a3e635", t: "Acceptable for most people" },
-    {
-        n: "Moderate",
-        c: "#facc15",
-        t: "Sensitive people should limit long outdoor activity"
-    },
-    { n: "Poor", c: "#fb923c", t: "Reduce prolonged outdoor exertion" },
-    { n: "Very Poor", c: "#ef4444", t: "Avoid outdoor activity, wear a mask" }
+    { n: "Good", c: "#4ade80", t: "Air is clean — enjoy the outdoors." },
+    { n: "Fair", c: "#a3e635", t: "Acceptable for most people." },
+    { n: "Moderate", c: "#facc15", t: "Sensitive people should limit long outdoor activity." },
+    { n: "Poor", c: "#fb923c", t: "Reduce prolonged outdoor exertion." },
+    { n: "Very poor", c: "#ef4444", t: "Avoid outdoor activity and wear a mask." }
 ];
+// [key, label, thresholds for Good/Fair/Moderate/Poor]
 const PL = [
     ["pm2_5", "PM2.5", [10, 25, 50, 75]],
     ["pm10", "PM10", [20, 50, 100, 200]],
@@ -689,18 +699,16 @@ function aqiUI() {
         el = $("#aqi");
     el.hidden = !a;
     if (!a) return;
-    const q = a.main.aqi,
+    const q = clamp(a.main.aqi, 1, 5),
         i = AQ[q];
     el.innerHTML =
-        `<h3>Air Quality</h3><div class="aq"><div class="num" style="color:${i.c}">${q}</div><div><b style="color:${i.c}">${i.n}</b><p>${i.t}</p></div></div>
-  <div class="scale">${AQ.slice(1)
-      .map(
-          (z, k) =>
-              `<u style="background:${z.c};opacity:${k + 1 === q ? 1 : 0.35}"></u>`
-      )
+        `<h3>${Ico.ui("wind")}Air quality<small>µg/m³</small></h3>
+  <div class="aq"><div class="num" style="color:${i.c}">${q}</div><div><b style="color:${i.c}">${i.n}</b><p>${i.t}</p></div></div>
+  <div class="scale" role="img" aria-label="Air quality scale, level ${q} of 5">${AQ.slice(1)
+      .map((z, k) => `<u style="background:${z.c};opacity:${k + 1 === q ? 1 : 0.3}"></u>`)
       .join("")}</div>` +
         PL.map(([k, n, t]) => {
-            const v = a.components[k],
+            const v = a.components?.[k] ?? 0,
                 l = t.filter(z => v >= z).length;
             return `<div class="pl"><span>${n}</span><div class="bar"><u style="width:${Math.min(100, (v / (t[3] * 1.25)) * 100)}%;background:${AQ[l + 1].c}"></u></div><em>${v.toFixed(1)}</em></div>`;
         }).join("");
@@ -708,36 +716,55 @@ function aqiUI() {
 
 /* ================= GRAPHS (Chart.js) ================= */
 const TABS = [
-    ["temp", "🌡️ Temp"],
-    ["rain", "🌧️ Rain"],
-    ["wind", "💨 Wind"],
-    ["hum", "💦 Humidity"],
-    ["pres", "🧭 Pressure"],
-    ["daily", "📊 Daily"],
-    ["aqi", "🌫️ AQI"]
+    ["temp", "Temperature"],
+    ["rain", "Rain"],
+    ["wind", "Wind"],
+    ["hum", "Humidity"],
+    ["pres", "Pressure"],
+    ["daily", "Daily range"],
+    ["aqi", "Air quality"]
 ];
 function charts() {
-    const tabs = TABS.filter(t => t[0] !== "aqi" || S.airFc);
+    const tabs = TABS.filter(t => t[0] !== "aqi" || S.airFc?.list?.length);
     if (!tabs.some(t => t[0] === S.tab)) S.tab = "temp";
     $("#charts").innerHTML =
-        `<h3>Graphs</h3><div class="tabs">${tabs.map(([k, l]) => `<button data-t="${k}" class="${k === S.tab ? "on" : ""}">${l}</button>`).join("")}</div><div class="cs"><div class="cb ${["daily", "aqi"].includes(S.tab) ? "" : "wide"}"><canvas id="cv"></canvas></div></div>`;
-    $("#charts .tabs").onclick = e => {
-        const k = e.target.dataset.t;
-        if (k) {
-            S.tab = k;
-            charts();
-        }
+        `<h3>${Ico.ui("gauge")}Graphs</h3>
+  <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === S.tab}" data-t="${k}" class="${k === S.tab ? "on" : ""}">${l}</button>`).join("")}</div>
+  <div class="cs"><div class="cb"><canvas id="cv" role="img" aria-label="Weather graph"></canvas></div></div>`;
+    const bar = $("#charts .tabs");
+    bar.onclick = e => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        S.tab = b.dataset.t;
+        [...bar.children].forEach(x => {
+            x.classList.toggle("on", x === b);
+            x.setAttribute("aria-selected", x === b);
+        });
+        draw(); // only the canvas is redrawn, so the tab bar keeps its scroll position
     };
     draw();
 }
 function draw() {
-    if (!window.Chart) return;
+    S.chart?.destroy();
+    S.chart = null;
+    const wrap = $("#charts .cs");
+    if (!wrap) return;
+    if (!window.Chart) {
+        wrap.innerHTML = '<p class="chart-note">Graphs couldn’t load. Check your connection and refresh the page.</p>';
+        return;
+    }
+    if (!$("#cv")) wrap.innerHTML = '<div class="cb"><canvas id="cv"></canvas></div>';
+    $("#charts .cb").classList.toggle("wide", !["daily", "aqi"].includes(S.tab));
+
     const u = U(),
         L = S.fc.list,
-        COL = "rgba(255,255,255,.88)",
+        COL = "rgba(255,255,255,.85)",
         f1 = v => +v.toFixed(1),
         tl = i => D[loc(i.dt).getUTCDay()] + " " + hr(i.dt, 0);
-    Chart.defaults.font.family = "Outfit,sans-serif";
+    const AC = hexRgb(getComputedStyle(document.body).getPropertyValue("--ac") || "#ffc94d");
+    Chart.defaults.font.family = '"Bricolage Grotesque",system-ui,sans-serif';
+    Chart.defaults.color = COL;
+
     const grad = rgb => c => {
         const a = c.chart.chartArea;
         if (!a) return "transparent";
@@ -765,18 +792,8 @@ function draw() {
     const M = {
         temp: {
             d: [
-                ln(
-                    "Temp " + u.tu,
-                    L.map(i => f1(u.t(i.main.temp))),
-                    "255,209,102",
-                    { f: 1 }
-                ),
-                ln(
-                    "Feels like",
-                    L.map(i => f1(u.t(i.main.feels_like))),
-                    "255,107,107",
-                    { d: [6, 5] }
-                )
+                ln("Temp " + u.tu, L.map(i => f1(u.t(i.main.temp))), AC, { f: 1 }),
+                ln("Feels like", L.map(i => f1(u.t(i.main.feels_like))), "255,123,107", { d: [6, 5] })
             ]
         },
         rain: {
@@ -785,61 +802,27 @@ function draw() {
                 {
                     type: "bar",
                     label: "Rain chance %",
-                    data: L.map(i => Math.round(i.pop * 100)),
+                    data: L.map(i => Math.round((i.pop || 0) * 100)),
                     backgroundColor: "rgba(79,172,254,.65)",
                     borderRadius: 6
                 },
-                ln(
-                    "Volume mm",
-                    L.map(i => (i.rain?.["3h"] || 0) + (i.snow?.["3h"] || 0)),
-                    "139,233,253",
-                    { y: "y1" }
-                )
+                ln("Volume mm", L.map(i => (i.rain?.["3h"] || 0) + (i.snow?.["3h"] || 0)), "139,233,253", { y: "y1" })
             ]
         },
         wind: {
             d: [
-                ln(
-                    "Wind " + u.wu,
-                    L.map(i => f1(u.w(i.wind.speed))),
-                    "134,239,172",
-                    { f: 1 }
-                ),
-                ln(
-                    "Gust",
-                    L.map(i => f1(u.w(i.wind.gust ?? i.wind.speed))),
-                    "253,224,71",
-                    { d: [6, 5] }
-                )
+                ln("Wind " + u.wu, L.map(i => f1(u.w(i.wind.speed))), "134,239,172", { f: 1 }),
+                ln("Gust", L.map(i => f1(u.w(i.wind.gust ?? i.wind.speed))), "253,224,71", { d: [6, 5] })
             ]
         },
         hum: {
             max: 100,
             d: [
-                ln(
-                    "Humidity %",
-                    L.map(i => i.main.humidity),
-                    "96,165,250",
-                    { f: 1 }
-                ),
-                ln(
-                    "Clouds %",
-                    L.map(i => i.clouds.all),
-                    "226,232,240",
-                    { d: [6, 5] }
-                )
+                ln("Humidity %", L.map(i => i.main.humidity), "96,165,250", { f: 1 }),
+                ln("Clouds %", L.map(i => i.clouds.all), "226,232,240", { d: [6, 5] })
             ]
         },
-        pres: {
-            d: [
-                ln(
-                    "Pressure hPa",
-                    L.map(i => i.main.pressure),
-                    "192,132,252",
-                    { f: 1 }
-                )
-            ]
-        },
+        pres: { d: [ln("Pressure hPa", L.map(i => i.main.pressure), "192,132,252", { f: 1 })] },
         daily: {
             lb: dd.map(x => x.n),
             d: [
@@ -847,7 +830,7 @@ function draw() {
                     type: "bar",
                     label: "Low–High " + u.tu,
                     data: dd.map(x => [f1(u.t(x.lo)), f1(u.t(x.hi))]),
-                    backgroundColor: "rgba(255,170,0,.8)",
+                    backgroundColor: `rgba(${AC},.85)`,
                     borderRadius: 12,
                     borderSkipped: false
                 }
@@ -861,44 +844,29 @@ function draw() {
                     type: "bar",
                     label: "AQI (1–5)",
                     data: A.map(i => i.main.aqi),
-                    backgroundColor: A.map(i => AQ[i.main.aqi].c),
+                    backgroundColor: A.map(i => AQ[clamp(i.main.aqi, 1, 5)].c),
                     borderRadius: 4
                 },
-                ln(
-                    "PM2.5 µg/m³",
-                    A.map(i => i.components.pm2_5),
-                    "255,255,255",
-                    { y: "y1" }
-                )
+                ln("PM2.5 µg/m³", A.map(i => i.components.pm2_5), "255,255,255", { y: "y1" })
             ]
         }
     };
-    const t = M[S.tab],
-        bar = ["rain", "daily", "aqi"].includes(S.tab);
-    S.chart?.destroy();
+    const t = M[S.tab] || M.temp,
+        isBar = ["rain", "daily", "aqi"].includes(S.tab);
     S.chart = new Chart($("#cv"), {
         type: "line",
         data: { labels: t.lb || L.map(tl), datasets: t.d },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: reduceMotion ? false : undefined,
             interaction: { mode: "index", intersect: false },
             plugins: {
-                legend: {
-                    labels: { color: COL, usePointStyle: true, boxWidth: 8 }
-                },
-                tooltip: {
-                    backgroundColor: "rgba(10,15,30,.9)",
-                    padding: 10,
-                    cornerRadius: 10
-                }
+                legend: { labels: { color: COL, usePointStyle: true, boxWidth: 8 } },
+                tooltip: { backgroundColor: "rgba(10,15,30,.92)", padding: 10, cornerRadius: 10 }
             },
             scales: {
-                x: {
-                    offset: bar,
-                    ticks: { color: COL, maxRotation: 0, maxTicksLimit: 9 },
-                    grid: { display: false }
-                },
+                x: { offset: isBar, ticks: { color: COL, maxRotation: 0, maxTicksLimit: 9 }, grid: { display: false } },
                 y: {
                     min: t.max ? 0 : undefined,
                     max: t.max,
@@ -918,12 +886,14 @@ function draw() {
     });
 }
 
-/* ================= RENDER + EVENTS ================= */
+/* ================= RENDER + CLOCK ================= */
 function render() {
-    const c = S.cur,
-        n = night(),
-        id = c.weather[0].id;
+    const n = isNight(),
+        id = S.cur.weather[0].id;
     $("#main").hidden = false;
+    $("#empty").hidden = true;
+    setSky(skyOf(id, n)); // first: charts read the accent colour that the sky sets
+    fx.set(fxOf(id, n, S.cur.wind.speed));
     hero();
     tips();
     hourly();
@@ -932,64 +902,136 @@ function render() {
     aqiUI();
     charts();
     tick();
-    setSky(skyOf(id, n));
-    fx.set(fxOf(id, n, c.wind.speed));
 }
 function tick() {
-    // live city clock
     if (!S.cur) return;
     const e = $("#clock");
-    if (!e) return;
-    const u = Date.now() / 1e3,
-        d = loc(u);
-    e.textContent = `${D[d.getUTCDay()]}, ${d.getUTCDate()} · ${hr(u)}`;
+    if (e) {
+        const u = Date.now() / 1e3,
+            d = loc(u);
+        e.textContent = `${D[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}, ${hr(u)}`;
+    }
+    const m = Math.floor((Date.now() - S.at) / 6e4);
+    $("#updated").textContent = m < 1 ? "Updated just now" : `Updated ${m} min ago`;
 }
 setInterval(tick, 1000);
-setInterval(() => {
-    if (S.geo && !document.hidden && Date.now() - S.at > REFRESH_MIN * 6e4)
-        load(S.geo, 1);
-}, 6e4);
+const stale = () => S.geo && !document.hidden && Date.now() - S.at > REFRESH_MIN * 6e4;
+setInterval(() => stale() && load(S.geo, true), 6e4);
+document.addEventListener("visibilitychange", () => stale() && load(S.geo, true));
+addEventListener("offline", () => toast("You’re offline. Showing the last data we have."));
+addEventListener("online", () => {
+    toast("Back online.");
+    S.geo ? load(S.geo, true) : start();
+});
 
+/* ================= RECENT SEARCHES ================= */
 const rec = () => ls.get("wx_recent", []);
 function pushRecent(g) {
-    const k = x => x.lat.toFixed(2) + x.lon.toFixed(2);
-    ls.set("wx_recent", [g, ...rec().filter(x => k(x) !== k(g))].slice(0, 6));
+    const k = x => Number(x.lat).toFixed(2) + "," + Number(x.lon).toFixed(2);
+    const mini = { name: g.name, state: g.state, country: g.country, lat: g.lat, lon: g.lon };
+    ls.set("wx_recent", [mini, ...rec().filter(x => k(x) !== k(g))].slice(0, 6));
     drawRecent();
 }
 function drawRecent() {
     $("#recent").innerHTML = rec()
         .map(
             (g, i) =>
-                `<button data-i="${i}">${esc(g.name)}<span data-x="${i}">✕</span></button>`
+                `<span class="chip"><button type="button" class="go" data-i="${i}">${esc(g.name)}</button><button type="button" class="rm" data-x="${i}" aria-label="Remove ${esc(g.name)}">${Ico.ui("x")}</button></span>`
         )
         .join("");
 }
 $("#recent").onclick = e => {
-    const x = e.target.dataset.x;
-    if (x != null) {
+    const rm = e.target.closest("[data-x]");
+    if (rm) {
         const r = rec();
-        r.splice(x, 1);
+        r.splice(+rm.dataset.x, 1);
         ls.set("wx_recent", r);
-        drawRecent();
-        return;
+        return drawRecent();
     }
-    const b = e.target.closest("button");
-    if (b) load(rec()[b.dataset.i]);
+    const go = e.target.closest("[data-i]");
+    const g = go && rec()[+go.dataset.i];
+    if (g) load(g);
 };
-const syncUnit = () => ($("#unit").textContent = U().tu);
-$("#unit").onclick = () => {
-    S.unit = S.unit === "metric" ? "imperial" : "metric";
-    ls.set("wx_unit", S.unit);
-    S.prevT = null;
-    syncUnit();
-    if (S.cur) render();
-};
+
+/* ================= SEARCH + SUGGESTIONS ================= */
+const input = $("#search-bar"),
+    box = $("#sugg"),
+    sg = { list: [], i: -1, tok: 0, tm: 0 };
+const place = g => [g.state, g.country].filter(Boolean).join(", ");
+function hideSugg() {
+    box.hidden = true;
+    sg.i = -1;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+}
+function showSugg(list) {
+    sg.list = list;
+    sg.i = -1;
+    if (!list.length) return hideSugg();
+    box.innerHTML = list
+        .map((g, i) => `<li role="option" id="sg${i}" data-i="${i}"><span>${esc(g.name)}</span><small>${esc(place(g))}</small></li>`)
+        .join("");
+    box.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+}
+function mark(i) {
+    sg.i = i;
+    [...box.children].forEach((li, k) => li.setAttribute("aria-selected", k === i));
+    i >= 0 ? input.setAttribute("aria-activedescendant", "sg" + i) : input.removeAttribute("aria-activedescendant");
+}
+function pick(g) {
+    input.value = g.name;
+    hideSugg();
+    input.blur();
+    load(g);
+}
+input.addEventListener("input", () => {
+    clearTimeout(sg.tm);
+    const q = input.value.trim();
+    if (q.length < 2) return hideSugg();
+    sg.tm = setTimeout(async () => {
+        const tok = ++sg.tok;
+        try {
+            const raw = await api("/geo/1.0/direct", { q, limit: 5 });
+            const seen = new Set(),
+                list = raw.filter(g => {
+                    const k = g.name + "|" + (g.state || "") + "|" + g.country;
+                    return seen.has(k) ? false : seen.add(k);
+                });
+            if (tok === sg.tok && document.activeElement === input) showSugg(list);
+        } catch {}
+    }, 280);
+});
+input.addEventListener("keydown", e => {
+    if (box.hidden) return;
+    const n = sg.list.length;
+    if (e.key === "ArrowDown") (e.preventDefault(), mark((sg.i + 1) % n));
+    else if (e.key === "ArrowUp") (e.preventDefault(), mark((sg.i - 1 + n) % n));
+    else if (e.key === "Escape") hideSugg();
+    else if (e.key === "Enter" && sg.i >= 0) (e.preventDefault(), pick(sg.list[sg.i]));
+});
+// pointerdown (not click) + preventDefault keeps the input focused, so blur doesn't close the list first
+box.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    const li = e.target.closest("li");
+    if (li) pick(sg.list[+li.dataset.i]);
+});
+input.addEventListener("blur", () => setTimeout(hideSugg, 120));
+addEventListener("keydown", e => {
+    if (e.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) {
+        e.preventDefault();
+        input.focus();
+    }
+});
 
 $("#search-box").onsubmit = async e => {
     e.preventDefault();
-    const q = $("#search-bar").value.trim();
+    const q = input.value.trim();
     if (!q) return;
-    $("#search-bar").blur();
+    clearTimeout(sg.tm);
+    sg.tok++;
+    hideSugg();
+    input.blur();
     try {
         const [g] = await api("/geo/1.0/direct", { q, limit: 1 });
         if (!g) throw new Err("notfound");
@@ -998,62 +1040,59 @@ $("#search-box").onsubmit = async e => {
         fail(x);
     }
 };
-let tm;
-$("#search-bar").oninput = e => {
-    // city suggestions
-    clearTimeout(tm);
-    const q = e.target.value.trim();
-    if (q.length < 2) return;
-    tm = setTimeout(async () => {
-        try {
-            $("#sugg").innerHTML = (
-                await api("/geo/1.0/direct", { q, limit: 5 })
-            )
-                .map(
-                    g =>
-                        `<option value="${esc(g.name)},${g.country}" label="${esc([g.state, g.country].filter(Boolean).join(", "))}">`
-                )
-                .join("");
-        } catch {}
-    }, 300);
+
+/* ================= BUTTONS ================= */
+const syncUnit = () => ($("#unit").textContent = U().tu);
+$("#unit").onclick = () => {
+    S.unit = S.unit === "metric" ? "imperial" : "metric";
+    ls.set("wx_unit", S.unit);
+    S.prevT = null;
+    syncUnit();
+    if (S.cur) render();
 };
-$("#locate").onclick = () =>
-    navigator.geolocation &&
+$("#refresh").onclick = () => (S.geo ? load(S.geo) : start());
+$("#retry").onclick = () => (S.geo ? load(S.geo) : start());
+$("#locate").onclick = () => {
+    if (!navigator.geolocation) return toast("Your browser doesn’t support location.");
+    toast("Finding your location…", 8000);
     navigator.geolocation.getCurrentPosition(
         async p => {
             const { latitude: lat, longitude: lon } = p.coords;
             let g = { name: "My location", country: "", lat, lon };
             try {
-                const [r] = await api("/geo/1.0/reverse", {
-                    lat,
-                    lon,
-                    limit: 1
-                });
+                const [r] = await api("/geo/1.0/reverse", { lat, lon, limit: 1 });
                 if (r) g = r;
             } catch {}
+            $("#toast").classList.remove("show");
             load(g);
         },
-        () =>
-            Swal.fire({
-                icon: "info",
-                title: "Location blocked",
-                text: "Allow location access in your browser settings.",
-                confirmButtonColor: "#ffaa00"
-            })
+        err =>
+            toast(
+                err.code === 1
+                    ? "Location access is blocked. Allow it in your browser settings, or search for a city."
+                    : "Couldn’t get your location. Try again or search for a city."
+            ),
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     );
+};
 
 /* ================= START ================= */
+async function start() {
+    $("#empty").hidden = true;
+    $("#skeleton").hidden = false;
+    try {
+        let g = ls.get("wx_last", null);
+        if (g?.lat == null || g?.lon == null) {
+            [g] = await api("/geo/1.0/direct", { q: DEFAULT_CITY, limit: 1 });
+        }
+        if (!g) throw new Err("notfound");
+        await load(g);
+    } catch (e) {
+        showEmpty(e);
+    }
+}
+document.querySelectorAll("[data-ico]").forEach(el => (el.innerHTML = Ico.ui(el.dataset.ico)));
 syncUnit();
 drawRecent();
 setSky("clear-day");
-(async () => {
-    try {
-        const g =
-            ls.get("wx_last", null) ||
-            (await api("/geo/1.0/direct", { q: DEFAULT_CITY, limit: 1 }))[0];
-        g && load(g);
-    } catch (e) {
-        $("#skeleton").hidden = true;
-        fail(e);
-    }
-})();
+start();
