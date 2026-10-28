@@ -95,7 +95,10 @@ const Ico = (() => {
     const ART = {
         sun: () => sun(),
         moon: () =>
-            moon() + star(88, 30, 1.1, 0) + star(30, 36, 0.8, 0.8) + star(94, 84, 0.7, 1.4),
+            moon() +
+            star(88, 30, 1.1, 0) +
+            star(30, 36, 0.8, 0.8) +
+            star(94, 84, 0.7, 1.4),
         "partly-day": () =>
             sun(46, 46, 0.78) + cloud("gCloud", 14, 22, 0.86, "a-drift"),
         "partly-night": () =>
@@ -108,14 +111,17 @@ const Ico = (() => {
             cloud("gCloud", 14, 20, 0.88, "a-drift"),
         drizzle: () =>
             cloud("gCloudGrey", 0, -8, 0.95) + drops([46, 62, 78], 88, 8, 3),
-        rain: () => cloud("gCloudGrey", 0, -8, 0.95) + drops([44, 60, 76], 88, 13, 4.2),
+        rain: () =>
+            cloud("gCloudGrey", 0, -8, 0.95) + drops([44, 60, 76], 88, 13, 4.2),
         thunder: () =>
             cloud("gCloudStorm", 0, -10, 0.95) +
             `<path class="a-bolt" d="M65 66 49 92h11l-6 20 24-30H66l8-16Z" fill="url(#gBolt)" stroke="#ffe27a" stroke-width="1" stroke-linejoin="round"/>` +
             drops([40, 84], 90, 10, 3.4),
         snow: () => cloud("gCloudGrey", 0, -8, 0.95) + flakes([42, 60, 78]),
         sleet: () =>
-            cloud("gCloudGrey", 0, -8, 0.95) + drops([44, 76], 88, 11, 3.8) + flakes([60]),
+            cloud("gCloudGrey", 0, -8, 0.95) +
+            drops([44, 76], 88, 11, 3.8) +
+            flakes([60]),
         mist: () =>
             cloud("gCloud", 6, -8, 0.82, "a-drift") +
             [
@@ -163,14 +169,18 @@ const Ico = (() => {
         gauge: '<path d="M4 17a8.5 8.5 0 1 1 16 0"/><path d="m12 17 4-5"/><path d="M12 17h.01"/>',
         eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
         cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9Z"/>',
-        sunrise: '<path d="M12 2v8"/><path d="m4.9 10.9 1.4 1.4"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.1 10.9-1.4 1.4"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/>',
+        sunrise:
+            '<path d="M12 2v8"/><path d="m4.9 10.9 1.4 1.4"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.1 10.9-1.4 1.4"/><path d="M22 22H2"/><path d="m8 6 4-4 4 4"/><path d="M16 18a4 4 0 0 0-8 0"/>',
         sunset: '<path d="M12 10V2"/><path d="m4.9 10.9 1.4 1.4"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.1 10.9-1.4 1.4"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/>',
-        umbrella: '<path d="M22 12a10 10 0 0 0-20 0Z"/><path d="M12 12v7a2 2 0 0 0 4 0"/><path d="M12 2v1"/>',
-        refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.7 9.7 0 0 1 6.7 2.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.7 9.7 0 0 1-6.7-2.7L3 16"/><path d="M8 16H3v5"/>',
+        umbrella:
+            '<path d="M22 12a10 10 0 0 0-20 0Z"/><path d="M12 12v7a2 2 0 0 0 4 0"/><path d="M12 2v1"/>',
+        refresh:
+            '<path d="M3 12a9 9 0 0 1 9-9 9.7 9.7 0 0 1 6.7 2.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.7 9.7 0 0 1-6.7-2.7L3 16"/><path d="M8 16H3v5"/>',
         snow: '<path d="M12 2v20"/><path d="m4.2 7 15.6 10"/><path d="M4.2 17 19.8 7"/><path d="m9 4 3 2 3-2"/><path d="m9 20 3-2 3 2"/>',
         sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
         bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
-        sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17v4M17 19h4"/>',
+        sparkle:
+            '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17v4M17 19h4"/>',
         alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
         nav: '<path d="M12 3 18 20l-6-4-6 4z"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',

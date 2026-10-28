@@ -92,8 +92,22 @@ const isNight = () => {
 };
 const compass = d =>
     [
-        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-        "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
+        "N",
+        "NNE",
+        "NE",
+        "ENE",
+        "E",
+        "ESE",
+        "SE",
+        "SSE",
+        "S",
+        "SSW",
+        "SW",
+        "WSW",
+        "W",
+        "WNW",
+        "NW",
+        "NNW"
     ][Math.round(d / 22.5) % 16];
 const dew = (t, h) => {
     const g = Math.log(Math.max(h, 1) / 100) + (17.62 * t) / (243.12 + t);
@@ -101,7 +115,17 @@ const dew = (t, h) => {
 };
 // how "bad" a condition is — used to pick the icon for a whole day
 const sev = id =>
-    id < 300 ? 5 : id < 400 ? 3 : id < 700 ? 4 : id < 800 ? 2 : id > 802 ? 1 : 0;
+    id < 300
+        ? 5
+        : id < 400
+          ? 3
+          : id < 700
+            ? 4
+            : id < 800
+              ? 2
+              : id > 802
+                ? 1
+                : 0;
 const hexRgb = h => {
     const m = String(h).trim().replace("#", "");
     const n = parseInt(m.length === 3 ? m.replace(/./g, "$&$&") : m, 16);
@@ -504,7 +528,20 @@ const fx = (() => {
 })();
 
 /* ================= UI SECTIONS ================= */
-const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MON = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
+];
 const drop = () => Ico.ui("drop");
 
 function count(sel, from, to) {
@@ -526,7 +563,8 @@ function hero() {
         w = c.weather[0],
         n = isNight(),
         v = Math.round(U().t(c.main.temp));
-    $("#hero").innerHTML = `<h1>${esc(S.geo.name || c.name)}<small>${esc(c.sys.country || S.geo.country || "")}</small></h1>
+    $("#hero").innerHTML =
+        `<h1>${esc(S.geo.name || c.name)}<small>${esc(c.sys.country || S.geo.country || "")}</small></h1>
   <p class="meta">${S.geo.state ? `<span>${esc(S.geo.state)}</span>` : ""}<span id="clock"></span></p>
   <div class="wx">${Ico.wx(Ico.kindOf(w.id, n))}</div>
   <div class="temp"><span id="tn">0</span><sup>${U().tu}</sup></div>
@@ -546,23 +584,44 @@ function tips() {
         a = [];
     if (id < 300) a.push(["bolt", "Thunderstorm nearby — stay indoors."]);
     if (pop >= 0.4)
-        a.push(["umbrella", `Carry an umbrella — ${Math.round(pop * 100)}% chance of rain in the next 12 hours.`]);
-    if (f >= 38) a.push(["therm", "Dangerously hot — drink water and avoid the midday sun."]);
-    else if (f >= 32) a.push(["therm", "Hot and humid — dress light and stay hydrated."]);
+        a.push([
+            "umbrella",
+            `Carry an umbrella — ${Math.round(pop * 100)}% chance of rain in the next 12 hours.`
+        ]);
+    if (f >= 38)
+        a.push([
+            "therm",
+            "Dangerously hot — drink water and avoid the midday sun."
+        ]);
+    else if (f >= 32)
+        a.push(["therm", "Hot and humid — dress light and stay hydrated."]);
     if (t <= 10) a.push(["snow", "Cold — wear a jacket."]);
-    if (c.wind.speed >= 10) a.push(["wind", "Strong wind — secure loose items outside."]);
-    if ((c.visibility ?? 1e4) < 2000) a.push(["eye", "Low visibility — drive carefully."]);
-    if (q >= 4) a.push(["alert", "Poor air quality — consider a mask outdoors."]);
-    if (id === 800 && !isNight()) a.push(["sun", "Clear and sunny — sunglasses and sunscreen."]);
+    if (c.wind.speed >= 10)
+        a.push(["wind", "Strong wind — secure loose items outside."]);
+    if ((c.visibility ?? 1e4) < 2000)
+        a.push(["eye", "Low visibility — drive carefully."]);
+    if (q >= 4)
+        a.push(["alert", "Poor air quality — consider a mask outdoors."]);
+    if (id === 800 && !isNight())
+        a.push(["sun", "Clear and sunny — sunglasses and sunscreen."]);
     if (!a.length) a.push(["sparkle", "Pleasant weather — enjoy your day."]);
-    $("#tips").innerHTML = a.map(([i, x]) => `<p>${Ico.ui(i)}<span>${x}</span></p>`).join("");
+    $("#tips").innerHTML = a
+        .map(([i, x]) => `<p>${Ico.ui(i)}<span>${x}</span></p>`)
+        .join("");
 }
 
 function hourly() {
     const c = S.cur,
         L = S.fc.list.slice(0, 12);
     const H = [
-        { dt: c.dt, t: c.main.temp, id: c.weather[0].id, n: isNight(), pop: L[0]?.pop || 0, now: 1 },
+        {
+            dt: c.dt,
+            t: c.main.temp,
+            id: c.weather[0].id,
+            n: isNight(),
+            pop: L[0]?.pop || 0,
+            now: 1
+        },
         ...L.map(i => ({
             dt: i.dt,
             t: i.main.temp,
@@ -596,8 +655,9 @@ function daily() {
         const pick =
             it
                 .filter(i => (i.pop || 0) >= 0.35)
-                .sort((a, b) => sev(b.weather[0].id) - sev(a.weather[0].id))[0] ||
-            it.reduce((a, b) => (noon(b) < noon(a) ? b : a));
+                .sort(
+                    (a, b) => sev(b.weather[0].id) - sev(a.weather[0].id)
+                )[0] || it.reduce((a, b) => (noon(b) < noon(a) ? b : a));
         return {
             n: k === today ? "Today" : D[loc(it[0].dt).getUTCDay()],
             hi: Math.max(...temps),
@@ -657,7 +717,12 @@ function stats() {
         `<div class="st"><p>${Ico.ui(icon)}${label}</p><strong>${val}</strong><small>${sub}</small>${ring != null ? `<div class="ring" style="--p:${clamp(ring, 0, 100)}"></div>` : ""}</div>`;
     $("#stats").innerHTML =
         `<h3>${Ico.ui("therm")}Details</h3><div class="sg">` +
-        tile("therm", "Feels like", T(m.feels_like), "Dew point " + T(dew(m.temp, m.humidity))) +
+        tile(
+            "therm",
+            "Feels like",
+            T(m.feels_like),
+            "Dew point " + T(dew(m.temp, m.humidity))
+        ) +
         tile("drop", "Humidity", m.humidity + "%", "", m.humidity) +
         tile(
             "wind",
@@ -671,7 +736,13 @@ function stats() {
             `${m.pressure} <span style="font-size:14px;font-weight:400">hPa</span>`,
             pd > 2 ? "Rising" : pd < -2 ? "Falling" : "Steady"
         ) +
-        tile("eye", "Visibility", `${u.v(vis).toFixed(1)} <span style="font-size:14px;font-weight:400">${u.vu}</span>`, "", Math.min(100, vis / 100)) +
+        tile(
+            "eye",
+            "Visibility",
+            `${u.v(vis).toFixed(1)} <span style="font-size:14px;font-weight:400">${u.vu}</span>`,
+            "",
+            Math.min(100, vis / 100)
+        ) +
         tile("cloud", "Clouds", c.clouds.all + "%", "", c.clouds.all) +
         sunTile() +
         "</div>";
@@ -681,9 +752,17 @@ const AQ = [
     0,
     { n: "Good", c: "#4ade80", t: "Air is clean — enjoy the outdoors." },
     { n: "Fair", c: "#a3e635", t: "Acceptable for most people." },
-    { n: "Moderate", c: "#facc15", t: "Sensitive people should limit long outdoor activity." },
+    {
+        n: "Moderate",
+        c: "#facc15",
+        t: "Sensitive people should limit long outdoor activity."
+    },
     { n: "Poor", c: "#fb923c", t: "Reduce prolonged outdoor exertion." },
-    { n: "Very poor", c: "#ef4444", t: "Avoid outdoor activity and wear a mask." }
+    {
+        n: "Very poor",
+        c: "#ef4444",
+        t: "Avoid outdoor activity and wear a mask."
+    }
 ];
 // [key, label, thresholds for Good/Fair/Moderate/Poor]
 const PL = [
@@ -704,8 +783,13 @@ function aqiUI() {
     el.innerHTML =
         `<h3>${Ico.ui("wind")}Air quality<small>µg/m³</small></h3>
   <div class="aq"><div class="num" style="color:${i.c}">${q}</div><div><b style="color:${i.c}">${i.n}</b><p>${i.t}</p></div></div>
-  <div class="scale" role="img" aria-label="Air quality scale, level ${q} of 5">${AQ.slice(1)
-      .map((z, k) => `<u style="background:${z.c};opacity:${k + 1 === q ? 1 : 0.3}"></u>`)
+  <div class="scale" role="img" aria-label="Air quality scale, level ${q} of 5">${AQ.slice(
+      1
+  )
+      .map(
+          (z, k) =>
+              `<u style="background:${z.c};opacity:${k + 1 === q ? 1 : 0.3}"></u>`
+      )
       .join("")}</div>` +
         PL.map(([k, n, t]) => {
             const v = a.components?.[k] ?? 0,
@@ -727,8 +811,7 @@ const TABS = [
 function charts() {
     const tabs = TABS.filter(t => t[0] !== "aqi" || S.airFc?.list?.length);
     if (!tabs.some(t => t[0] === S.tab)) S.tab = "temp";
-    $("#charts").innerHTML =
-        `<h3>${Ico.ui("gauge")}Graphs</h3>
+    $("#charts").innerHTML = `<h3>${Ico.ui("gauge")}Graphs</h3>
   <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === S.tab}" data-t="${k}" class="${k === S.tab ? "on" : ""}">${l}</button>`).join("")}</div>
   <div class="cs"><div class="cb"><canvas id="cv" role="img" aria-label="Weather graph"></canvas></div></div>`;
     const bar = $("#charts .tabs");
@@ -750,18 +833,25 @@ function draw() {
     const wrap = $("#charts .cs");
     if (!wrap) return;
     if (!window.Chart) {
-        wrap.innerHTML = '<p class="chart-note">Graphs couldn’t load. Check your connection and refresh the page.</p>';
+        wrap.innerHTML =
+            '<p class="chart-note">Graphs couldn’t load. Check your connection and refresh the page.</p>';
         return;
     }
-    if (!$("#cv")) wrap.innerHTML = '<div class="cb"><canvas id="cv"></canvas></div>';
-    $("#charts .cb").classList.toggle("wide", !["daily", "aqi"].includes(S.tab));
+    if (!$("#cv"))
+        wrap.innerHTML = '<div class="cb"><canvas id="cv"></canvas></div>';
+    $("#charts .cb").classList.toggle(
+        "wide",
+        !["daily", "aqi"].includes(S.tab)
+    );
 
     const u = U(),
         L = S.fc.list,
         COL = "rgba(255,255,255,.85)",
         f1 = v => +v.toFixed(1),
         tl = i => D[loc(i.dt).getUTCDay()] + " " + hr(i.dt, 0);
-    const AC = hexRgb(getComputedStyle(document.body).getPropertyValue("--ac") || "#ffc94d");
+    const AC = hexRgb(
+        getComputedStyle(document.body).getPropertyValue("--ac") || "#ffc94d"
+    );
     Chart.defaults.font.family = '"Bricolage Grotesque",system-ui,sans-serif';
     Chart.defaults.color = COL;
 
@@ -792,8 +882,18 @@ function draw() {
     const M = {
         temp: {
             d: [
-                ln("Temp " + u.tu, L.map(i => f1(u.t(i.main.temp))), AC, { f: 1 }),
-                ln("Feels like", L.map(i => f1(u.t(i.main.feels_like))), "255,123,107", { d: [6, 5] })
+                ln(
+                    "Temp " + u.tu,
+                    L.map(i => f1(u.t(i.main.temp))),
+                    AC,
+                    { f: 1 }
+                ),
+                ln(
+                    "Feels like",
+                    L.map(i => f1(u.t(i.main.feels_like))),
+                    "255,123,107",
+                    { d: [6, 5] }
+                )
             ]
         },
         rain: {
@@ -806,23 +906,57 @@ function draw() {
                     backgroundColor: "rgba(79,172,254,.65)",
                     borderRadius: 6
                 },
-                ln("Volume mm", L.map(i => (i.rain?.["3h"] || 0) + (i.snow?.["3h"] || 0)), "139,233,253", { y: "y1" })
+                ln(
+                    "Volume mm",
+                    L.map(i => (i.rain?.["3h"] || 0) + (i.snow?.["3h"] || 0)),
+                    "139,233,253",
+                    { y: "y1" }
+                )
             ]
         },
         wind: {
             d: [
-                ln("Wind " + u.wu, L.map(i => f1(u.w(i.wind.speed))), "134,239,172", { f: 1 }),
-                ln("Gust", L.map(i => f1(u.w(i.wind.gust ?? i.wind.speed))), "253,224,71", { d: [6, 5] })
+                ln(
+                    "Wind " + u.wu,
+                    L.map(i => f1(u.w(i.wind.speed))),
+                    "134,239,172",
+                    { f: 1 }
+                ),
+                ln(
+                    "Gust",
+                    L.map(i => f1(u.w(i.wind.gust ?? i.wind.speed))),
+                    "253,224,71",
+                    { d: [6, 5] }
+                )
             ]
         },
         hum: {
             max: 100,
             d: [
-                ln("Humidity %", L.map(i => i.main.humidity), "96,165,250", { f: 1 }),
-                ln("Clouds %", L.map(i => i.clouds.all), "226,232,240", { d: [6, 5] })
+                ln(
+                    "Humidity %",
+                    L.map(i => i.main.humidity),
+                    "96,165,250",
+                    { f: 1 }
+                ),
+                ln(
+                    "Clouds %",
+                    L.map(i => i.clouds.all),
+                    "226,232,240",
+                    { d: [6, 5] }
+                )
             ]
         },
-        pres: { d: [ln("Pressure hPa", L.map(i => i.main.pressure), "192,132,252", { f: 1 })] },
+        pres: {
+            d: [
+                ln(
+                    "Pressure hPa",
+                    L.map(i => i.main.pressure),
+                    "192,132,252",
+                    { f: 1 }
+                )
+            ]
+        },
         daily: {
             lb: dd.map(x => x.n),
             d: [
@@ -847,7 +981,12 @@ function draw() {
                     backgroundColor: A.map(i => AQ[clamp(i.main.aqi, 1, 5)].c),
                     borderRadius: 4
                 },
-                ln("PM2.5 µg/m³", A.map(i => i.components.pm2_5), "255,255,255", { y: "y1" })
+                ln(
+                    "PM2.5 µg/m³",
+                    A.map(i => i.components.pm2_5),
+                    "255,255,255",
+                    { y: "y1" }
+                )
             ]
         }
     };
@@ -862,11 +1001,21 @@ function draw() {
             animation: reduceMotion ? false : undefined,
             interaction: { mode: "index", intersect: false },
             plugins: {
-                legend: { labels: { color: COL, usePointStyle: true, boxWidth: 8 } },
-                tooltip: { backgroundColor: "rgba(10,15,30,.92)", padding: 10, cornerRadius: 10 }
+                legend: {
+                    labels: { color: COL, usePointStyle: true, boxWidth: 8 }
+                },
+                tooltip: {
+                    backgroundColor: "rgba(10,15,30,.92)",
+                    padding: 10,
+                    cornerRadius: 10
+                }
             },
             scales: {
-                x: { offset: isBar, ticks: { color: COL, maxRotation: 0, maxTicksLimit: 9 }, grid: { display: false } },
+                x: {
+                    offset: isBar,
+                    ticks: { color: COL, maxRotation: 0, maxTicksLimit: 9 },
+                    grid: { display: false }
+                },
                 y: {
                     min: t.max ? 0 : undefined,
                     max: t.max,
@@ -912,13 +1061,20 @@ function tick() {
         e.textContent = `${D[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}, ${hr(u)}`;
     }
     const m = Math.floor((Date.now() - S.at) / 6e4);
-    $("#updated").textContent = m < 1 ? "Updated just now" : `Updated ${m} min ago`;
+    $("#updated").textContent =
+        m < 1 ? "Updated just now" : `Updated ${m} min ago`;
 }
 setInterval(tick, 1000);
-const stale = () => S.geo && !document.hidden && Date.now() - S.at > REFRESH_MIN * 6e4;
+const stale = () =>
+    S.geo && !document.hidden && Date.now() - S.at > REFRESH_MIN * 6e4;
 setInterval(() => stale() && load(S.geo, true), 6e4);
-document.addEventListener("visibilitychange", () => stale() && load(S.geo, true));
-addEventListener("offline", () => toast("You’re offline. Showing the last data we have."));
+document.addEventListener(
+    "visibilitychange",
+    () => stale() && load(S.geo, true)
+);
+addEventListener("offline", () =>
+    toast("You’re offline. Showing the last data we have.")
+);
 addEventListener("online", () => {
     toast("Back online.");
     S.geo ? load(S.geo, true) : start();
@@ -928,8 +1084,17 @@ addEventListener("online", () => {
 const rec = () => ls.get("wx_recent", []);
 function pushRecent(g) {
     const k = x => Number(x.lat).toFixed(2) + "," + Number(x.lon).toFixed(2);
-    const mini = { name: g.name, state: g.state, country: g.country, lat: g.lat, lon: g.lon };
-    ls.set("wx_recent", [mini, ...rec().filter(x => k(x) !== k(g))].slice(0, 6));
+    const mini = {
+        name: g.name,
+        state: g.state,
+        country: g.country,
+        lat: g.lat,
+        lon: g.lon
+    };
+    ls.set(
+        "wx_recent",
+        [mini, ...rec().filter(x => k(x) !== k(g))].slice(0, 6)
+    );
     drawRecent();
 }
 function drawRecent() {
@@ -969,15 +1134,22 @@ function showSugg(list) {
     sg.i = -1;
     if (!list.length) return hideSugg();
     box.innerHTML = list
-        .map((g, i) => `<li role="option" id="sg${i}" data-i="${i}"><span>${esc(g.name)}</span><small>${esc(place(g))}</small></li>`)
+        .map(
+            (g, i) =>
+                `<li role="option" id="sg${i}" data-i="${i}"><span>${esc(g.name)}</span><small>${esc(place(g))}</small></li>`
+        )
         .join("");
     box.hidden = false;
     input.setAttribute("aria-expanded", "true");
 }
 function mark(i) {
     sg.i = i;
-    [...box.children].forEach((li, k) => li.setAttribute("aria-selected", k === i));
-    i >= 0 ? input.setAttribute("aria-activedescendant", "sg" + i) : input.removeAttribute("aria-activedescendant");
+    [...box.children].forEach((li, k) =>
+        li.setAttribute("aria-selected", k === i)
+    );
+    i >= 0
+        ? input.setAttribute("aria-activedescendant", "sg" + i)
+        : input.removeAttribute("aria-activedescendant");
 }
 function pick(g) {
     input.value = g.name;
@@ -998,7 +1170,8 @@ input.addEventListener("input", () => {
                     const k = g.name + "|" + (g.state || "") + "|" + g.country;
                     return seen.has(k) ? false : seen.add(k);
                 });
-            if (tok === sg.tok && document.activeElement === input) showSugg(list);
+            if (tok === sg.tok && document.activeElement === input)
+                showSugg(list);
         } catch {}
     }, 280);
 });
@@ -1006,9 +1179,11 @@ input.addEventListener("keydown", e => {
     if (box.hidden) return;
     const n = sg.list.length;
     if (e.key === "ArrowDown") (e.preventDefault(), mark((sg.i + 1) % n));
-    else if (e.key === "ArrowUp") (e.preventDefault(), mark((sg.i - 1 + n) % n));
+    else if (e.key === "ArrowUp")
+        (e.preventDefault(), mark((sg.i - 1 + n) % n));
     else if (e.key === "Escape") hideSugg();
-    else if (e.key === "Enter" && sg.i >= 0) (e.preventDefault(), pick(sg.list[sg.i]));
+    else if (e.key === "Enter" && sg.i >= 0)
+        (e.preventDefault(), pick(sg.list[sg.i]));
 });
 // pointerdown (not click) + preventDefault keeps the input focused, so blur doesn't close the list first
 box.addEventListener("pointerdown", e => {
@@ -1018,7 +1193,10 @@ box.addEventListener("pointerdown", e => {
 });
 input.addEventListener("blur", () => setTimeout(hideSugg, 120));
 addEventListener("keydown", e => {
-    if (e.key === "/" && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) {
+    if (
+        e.key === "/" &&
+        !/INPUT|TEXTAREA/.test(document.activeElement?.tagName)
+    ) {
         e.preventDefault();
         input.focus();
     }
@@ -1053,14 +1231,19 @@ $("#unit").onclick = () => {
 $("#refresh").onclick = () => (S.geo ? load(S.geo) : start());
 $("#retry").onclick = () => (S.geo ? load(S.geo) : start());
 $("#locate").onclick = () => {
-    if (!navigator.geolocation) return toast("Your browser doesn’t support location.");
+    if (!navigator.geolocation)
+        return toast("Your browser doesn’t support location.");
     toast("Finding your location…", 8000);
     navigator.geolocation.getCurrentPosition(
         async p => {
             const { latitude: lat, longitude: lon } = p.coords;
             let g = { name: "My location", country: "", lat, lon };
             try {
-                const [r] = await api("/geo/1.0/reverse", { lat, lon, limit: 1 });
+                const [r] = await api("/geo/1.0/reverse", {
+                    lat,
+                    lon,
+                    limit: 1
+                });
                 if (r) g = r;
             } catch {}
             $("#toast").classList.remove("show");
@@ -1091,7 +1274,9 @@ async function start() {
         showEmpty(e);
     }
 }
-document.querySelectorAll("[data-ico]").forEach(el => (el.innerHTML = Ico.ui(el.dataset.ico)));
+document
+    .querySelectorAll("[data-ico]")
+    .forEach(el => (el.innerHTML = Ico.ui(el.dataset.ico)));
 syncUnit();
 drawRecent();
 setSky("clear-day");
